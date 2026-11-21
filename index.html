@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Choose from Google Drive · Coop</title>
+  <style>
+    body { margin: 24px; font: 14px/1.45 "SF Pro Text", system-ui, sans-serif; color: #403c3a; background: #fff; }
+  </style>
+</head>
+<body>
+  <!--
+    Coop's Google Drive picker. Google's Picker can't run inside a Chrome extension, so Coop opens this page in a
+    popup window. Coop passes everything it needs after the # in the address, which browsers never send to the
+    server: a Drive sign-in token, the Picker API key, the Cloud project number, the extension ID and a one-time code.
+    The chosen folder or document goes back to Coop through Chrome's extension messaging; this page stores nothing.
+    Source: picker/index.html in the Coop extension repository.
+  -->
+  <p id="status" role="status">Opening Google Drive…</p>
+  <script>
+    const params = new URLSearchParams(location.hash.slice(1));
+    // Take the token out of the address bar and history straight away.
+    history.replaceState(null, '', location.pathname);
+    const token = params.get('token');
+    const apiKey = params.get('key');
+    const appId = params.get('app');
+    const extensionId = params.get('ext');
+    const nonce = params.get('nonce');
+    const status = document.getElementById('status');
+
+    function reply(message) {
+      if (!window.chrome?.runtime?.sendMessage) {
+        status.textContent = 'Coop isn’t allowed to receive results from this page. Check the Coop setup instructions.';
+        return;
+      }
+      chrome.runtime.sendMessage(extensionId, { type: 'coop-picker', nonce, ...message }, () => {
+        // Coop closes this window. If it can't, say what happened.
+        status.textContent = chrome.runtime.lastError ? 'Coop didn’t respond. Close this window and try again.' : 'Done. You can close this window.';
+      });
+    }
+
+    function showPicker() {
+      const types = 'application/vnd.google-apps.folder,application/vnd.google-apps.document';
+      const myDrive = new google.picker.DocsView(google.picker.ViewId.DOCS)
+        .setIncludeFolders(true).setSelectFolderEnabled(true).setMimeTypes(types).setOwnedByMe(true);
+      const shared = new google.picker.DocsView(google.picker.ViewId.DOCS)
+        .setIncludeFolders(true).setSelectFolderEnabled(true).setMimeTypes(types).setOwnedByMe(false);
+      const drives = new google.picker.DocsView(google.picker.ViewId.DOCS)
+        .setIncludeFolders(true).setSelectFolderEnabled(true).setMimeTypes(types).setEnableDrives(true);
+      new google.picker.PickerBuilder()
+        .setTitle('Choose a folder or document')
+        .addView(myDrive).addView(shared).addView(drives)
+        .enableFeature(google.picker.Feature.SUPPORT_DRIVES)
+        .setOAuthToken(token).setDeveloperKey(apiKey).setAppId(appId).setOrigin(location.origin)
+        .setSize(Math.min(1051, innerWidth - 20), Math.min(650, innerHeight - 20))
+        .setCallback(data => {
+          if (data.action === google.picker.Action.PICKED) {
+            const [item] = data.docs;
+            reply({ id: item.id, name: item.name, kind: item.mimeType === 'application/vnd.google-apps.folder' ? 'folder' : 'document' });
+          } else if (data.action === google.picker.Action.CANCEL) {
+            reply({ cancelled: true });
+          }
+        })
+        .build()
+        .setVisible(true);
+      status.textContent = '';
+    }
+
+    function start() {
+      if (!token || !apiKey || !appId || !/^[a-p]{32}$/.test(extensionId || '') || !nonce) {
+        status.textContent = 'Open this page from Coop’s Notes tab.';
+        return;
+      }
+      gapi.load('picker', { callback: showPicker, onerror: () => { status.textContent = 'Google Picker didn’t load. Check your connection and try again.'; } });
+    }
+  </script>
+  <script src="https://apis.google.com/js/api.js" onload="start()" onerror="status.textContent = 'Google Picker didn’t load. Check your connection and try again.'"></script>
+</body>
+</html>
