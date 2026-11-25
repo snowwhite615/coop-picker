@@ -26,6 +26,8 @@
     const appId = params.get('app');
     const extensionId = params.get('ext');
     const nonce = params.get('nonce');
+    // only=folders shows folders only, for Coop versions that save each note as a new document.
+    const foldersOnly = params.get('only') === 'folders';
     const status = document.getElementById('status');
 
     function reply(message) {
@@ -40,7 +42,7 @@
     }
 
     function showPicker() {
-      const types = 'application/vnd.google-apps.folder,application/vnd.google-apps.document';
+      const types = foldersOnly ? 'application/vnd.google-apps.folder' : 'application/vnd.google-apps.folder,application/vnd.google-apps.document';
       const myDrive = new google.picker.DocsView(google.picker.ViewId.DOCS)
         .setIncludeFolders(true).setSelectFolderEnabled(true).setMimeTypes(types).setOwnedByMe(true);
       const shared = new google.picker.DocsView(google.picker.ViewId.DOCS)
@@ -48,7 +50,7 @@
       const drives = new google.picker.DocsView(google.picker.ViewId.DOCS)
         .setIncludeFolders(true).setSelectFolderEnabled(true).setMimeTypes(types).setEnableDrives(true);
       new google.picker.PickerBuilder()
-        .setTitle('Choose a folder or document')
+        .setTitle(foldersOnly ? 'Choose a folder' : 'Choose a folder or document')
         .addView(myDrive).addView(shared).addView(drives)
         .enableFeature(google.picker.Feature.SUPPORT_DRIVES)
         .setOAuthToken(token).setDeveloperKey(apiKey).setAppId(appId).setOrigin(location.origin)
